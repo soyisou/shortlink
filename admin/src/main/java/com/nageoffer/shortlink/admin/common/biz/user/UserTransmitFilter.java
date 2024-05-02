@@ -47,6 +47,7 @@ public class UserTransmitFilter implements Filter {
         try {
             filterChain.doFilter(servletRequest, servletResponse);
         } finally {
+            //放置内存泄露或者线程安全问题
             UserContext.removeUser();
         }
     }
