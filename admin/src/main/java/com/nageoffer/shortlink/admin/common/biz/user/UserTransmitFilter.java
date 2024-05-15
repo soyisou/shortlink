@@ -47,6 +47,7 @@ public class UserTransmitFilter implements Filter {
         try {
             filterChain.doFilter(servletRequest, servletResponse);
         } finally {
+            //acjava： 能保留多久呢？
             UserContext.removeUser();
         }
     }
