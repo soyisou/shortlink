@@ -1,5 +1,6 @@
 server:
-  port: 8001
+#  port: 8001
+  port: 80
 
 spring:
   application:
@@ -24,7 +25,8 @@ spring:
 
 short-link:
   domain:
-    default: nurl.ink:8001
+#    default: nurl.ink:8001
+    default: nurl.ink
   stats:
     locale:
       amap-key: 824c511f0997586ea016f979fdb23087

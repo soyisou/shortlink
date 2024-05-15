@@ -5,7 +5,7 @@ dataSources:
 #    jdbcUrl: jdbc:mysql://127.0.0.1:3306/link?useUnicode=true&characterEncoding=UTF-8&rewriteBatchedStatements=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
     jdbcUrl: jdbc:mysql://39.108.218.39:3306/link?useUnicode=true&characterEncoding=UTF-8&rewriteBatchedStatements=true&allowMultiQueries=true&serverTimezone=Asia/Shanghai
     username: root
-    password: 123456
+    password: o#DwN&JSa56
 
 rules:
   - !SHARDING
