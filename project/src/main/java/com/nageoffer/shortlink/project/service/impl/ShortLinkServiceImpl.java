@@ -123,12 +123,16 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                 .append("/")
                 .append(shortLinkSuffix)
                 .toString();
+        //短连接表
         ShortLinkDO shortLinkDO = ShortLinkDO.builder()
                 .domain(createShortLinkDefaultDomain)
                 .originUrl(requestParam.getOriginUrl())
                 .gid(requestParam.getGid())
+                //默认是1
                 .createdType(requestParam.getCreatedType())
+                //默认是0
                 .validDateType(requestParam.getValidDateType())
+                //默认是null
                 .validDate(requestParam.getValidDate())
                 .describe(requestParam.getDescribe())
                 .shortUri(shortLinkSuffix)
@@ -138,12 +142,15 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
                 .totalUip(0)
                 .delTime(0L)
                 .fullShortUrl(fullShortUrl)
+                //同步方式获取
                 .favicon(getFavicon(requestParam.getOriginUrl()))
                 .build();
+        //跳转表
         ShortLinkGotoDO linkGotoDO = ShortLinkGotoDO.builder()
                 .fullShortUrl(fullShortUrl)
                 .gid(requestParam.getGid())
                 .build();
+        //TODO: 短连接创建是没有对原始URL进行检查的，即同一原始URL可以重复创建短连接，以后可以优化这一点
         try {
             // 短链接项目有多少数据？如何解决海量数据存储？详情查看：https://nageoffer.com/shortlink/question
             baseMapper.insert(shortLinkDO);
@@ -160,6 +167,7 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
         stringRedisTemplate.opsForValue().set(
                 String.format(GOTO_SHORT_LINK_KEY, fullShortUrl),
                 requestParam.getOriginUrl(),
+                //默认有效期一个月
                 LinkUtil.getLinkCacheValidTime(requestParam.getValidDate()), TimeUnit.MILLISECONDS
         );
         // 删除短链接后，布隆过滤器如何删除？详情查看：https://nageoffer.com/shortlink/question
@@ -258,34 +266,43 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
     public void updateShortLink(ShortLinkUpdateReqDTO requestParam) {
         verificationWhitelist(requestParam.getOriginUrl());
         LambdaQueryWrapper<ShortLinkDO> queryWrapper = Wrappers.lambdaQuery(ShortLinkDO.class)
+                //有可能修改分组id，因此使用原来的分组id进行查询
                 .eq(ShortLinkDO::getGid, requestParam.getOriginGid())
                 .eq(ShortLinkDO::getFullShortUrl, requestParam.getFullShortUrl())
                 .eq(ShortLinkDO::getDelFlag, 0)
                 .eq(ShortLinkDO::getEnableStatus, 0);
+        //先查询数据库中要更新的gid对应的短连接是否存在
         ShortLinkDO hasShortLinkDO = baseMapper.selectOne(queryWrapper);
         if (hasShortLinkDO == null) {
             throw new ClientException("短链接记录不存在");
         }
+
+        //情况1：没有修改分组id
         if (Objects.equals(hasShortLinkDO.getGid(), requestParam.getGid())) {
             LambdaUpdateWrapper<ShortLinkDO> updateWrapper = Wrappers.lambdaUpdate(ShortLinkDO.class)
+                    //更新原始url等
                     .eq(ShortLinkDO::getFullShortUrl, requestParam.getFullShortUrl())
                     .eq(ShortLinkDO::getGid, requestParam.getGid())
                     .eq(ShortLinkDO::getDelFlag, 0)
                     .eq(ShortLinkDO::getEnableStatus, 0)
                     .set(Objects.equals(requestParam.getValidDateType(), VailDateTypeEnum.PERMANENT.getType()), ShortLinkDO::getValidDate, null);
             ShortLinkDO shortLinkDO = ShortLinkDO.builder()
+                    //依旧是原始内容
                     .domain(hasShortLinkDO.getDomain())
                     .shortUri(hasShortLinkDO.getShortUri())
                     .favicon(hasShortLinkDO.getFavicon())
                     .createdType(hasShortLinkDO.getCreatedType())
                     .gid(requestParam.getGid())
+                    //修改原始url、描述、有效期类型、有效期
                     .originUrl(requestParam.getOriginUrl())
                     .describe(requestParam.getDescribe())
                     .validDateType(requestParam.getValidDateType())
                     .validDate(requestParam.getValidDate())
                     .build();
+            //更新数据库
             baseMapper.update(shortLinkDO, updateWrapper);
         } else {
+            //情况2：修改了分组id
             // 为什么监控表要加上Gid？不加的话是否就不存在读写锁？详情查看：https://nageoffer.com/shortlink/question
             RReadWriteLock readWriteLock = redissonClient.getReadWriteLock(String.format(LOCK_GID_UPDATE_KEY, requestParam.getFullShortUrl()));
             RLock rLock = readWriteLock.writeLock();
@@ -293,38 +310,54 @@ public class ShortLinkServiceImpl extends ServiceImpl<ShortLinkMapper, ShortLink
             try {
                 LambdaUpdateWrapper<ShortLinkDO> linkUpdateWrapper = Wrappers.lambdaUpdate(ShortLinkDO.class)
                         .eq(ShortLinkDO::getFullShortUrl, requestParam.getFullShortUrl())
+                        //数据库中查到的gid，即旧的gid
+                        //使用这个也可以
+                        .eq(ShortLinkDO::getGid, requestParam.getOriginGid())
+//                        .eq(ShortLinkDO::getGid, hasShortLinkDO.getGid())
                         .eq(ShortLinkDO::getGid, hasShortLinkDO.getGid())
                         .eq(ShortLinkDO::getDelFlag, 0)
                         .eq(ShortLinkDO::getDelTime, 0L)
                         .eq(ShortLinkDO::getEnableStatus, 0);
+
                 ShortLinkDO delShortLinkDO = ShortLinkDO.builder()
                         .delTime(System.currentTimeMillis())
                         .build();
+                //之所以没写在上面的builder中是因为delFlag是继承来的，builder检测不到（可以在子类和父类中使用@SuperBuilder注解解决）
                 delShortLinkDO.setDelFlag(1);
                 baseMapper.update(delShortLinkDO, linkUpdateWrapper);
+
+                //使用新的gid创建一条短连接
                 ShortLinkDO shortLinkDO = ShortLinkDO.builder()
                         .domain(createShortLinkDefaultDomain)
+                        //使用更新后的短连接信息设置
                         .originUrl(requestParam.getOriginUrl())
-                        .gid(requestParam.getGid())
-                        .createdType(hasShortLinkDO.getCreatedType())
                         .validDateType(requestParam.getValidDateType())
                         .validDate(requestParam.getValidDate())
                         .describe(requestParam.getDescribe())
+                        //插入新的gid
+                        .gid(requestParam.getGid())
+                        .favicon(getFavicon(requestParam.getOriginUrl()))
+
+                        //保存原始的短连接信息设置
+                        .createdType(hasShortLinkDO.getCreatedType())
                         .shortUri(hasShortLinkDO.getShortUri())
                         .enableStatus(hasShortLinkDO.getEnableStatus())
                         .totalPv(hasShortLinkDO.getTotalPv())
                         .totalUv(hasShortLinkDO.getTotalUv())
                         .totalUip(hasShortLinkDO.getTotalUip())
                         .fullShortUrl(hasShortLinkDO.getFullShortUrl())
-                        .favicon(getFavicon(requestParam.getOriginUrl()))
                         .delTime(0L)
                         .build();
                 baseMapper.insert(shortLinkDO);
+
+                //更新gotolin表（包含删除旧信息+插入新的信息）
                 LambdaQueryWrapper<ShortLinkGotoDO> linkGotoQueryWrapper = Wrappers.lambdaQuery(ShortLinkGotoDO.class)
                         .eq(ShortLinkGotoDO::getFullShortUrl, requestParam.getFullShortUrl())
                         .eq(ShortLinkGotoDO::getGid, hasShortLinkDO.getGid());
                 ShortLinkGotoDO shortLinkGotoDO = shortLinkGotoMapper.selectOne(linkGotoQueryWrapper);
+                //1. 删除原来的gotolink信息
                 shortLinkGotoMapper.delete(linkGotoQueryWrapper);
+                //2. 插入新的gid对应的短连接信息
                 shortLinkGotoDO.setGid(requestParam.getGid());
                 shortLinkGotoMapper.insert(shortLinkGotoDO);
             } finally {
