@@ -40,8 +40,11 @@ import java.util.Objects;
 
 /**
  * SpringCloud Gateway Token 拦截器
+ * 这段代码定义了一个Spring Cloud Gateway的自定义过滤器，用于验证请求中的令牌（token）。
+ * 如果令牌验证失败，则返回未授权状态。这是一个实现基于Redis存储的令牌验证的过滤器，并通过添加用户信息到请求头来增强请求。
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
  */
+
 @Component
 public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFactory<Config> {
 
@@ -52,8 +55,28 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
         this.stringRedisTemplate = stringRedisTemplate;
     }
 
+    /**
+     * 在TokenValidateGatewayFilterFactory类中，apply函数的作用是创建并返回一个自定义的GatewayFilter实例。
+     * 这个GatewayFilter会在Spring Cloud Gateway处理请求时执行特定的逻辑。在这个例子中，
+     * apply方法生成的过滤器用于验证请求中的令牌（token），并根据验证结果决定是否允许请求继续通过网关。
+     * @param config
+     * @return
+     */
     @Override
     public GatewayFilter apply(Config config) {
+        /**
+         * ServerWebExchange exchange：
+         *
+         * ServerWebExchange是Spring WebFlux中表示HTTP请求-响应交互的契约。它包含了请求和响应对象，并提供了多种方法来操作这些对象。
+         * 主要作用是访问和修改HTTP请求和响应。通过exchange，可以获取请求头、请求路径、HTTP方法等信息，并可以修改响应状态和内容。
+         * GatewayFilterChain chain：
+         *
+         * GatewayFilterChain表示过滤器链，它包含了一系列过滤器，用于在请求到达目标服务之前对请求进行处理，或在响应返回客户端之前对响应进行处理。
+         * 主要作用是将当前请求传递给过滤器链中的下一个过滤器。调用chain.filter(exchange)会将处理权交给下一个过滤器。
+         *
+         * mutate()方法的作用是获取当前对象的一个构建器对象，通过这个构建器对象可以对当前对象的一些属性进行修改，
+         * 然后调用build()方法来生成一个新的对象实例。这个新对象将包含所有的修改，并保留未修改的属性。
+         */
         return (exchange, chain) -> {
             ServerHttpRequest request = exchange.getRequest();
             String requestPath = request.getPath().toString();
@@ -62,14 +85,18 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
                 String username = request.getHeaders().getFirst("username");
                 String token = request.getHeaders().getFirst("token");
                 Object userInfo;
+                //验证令牌
                 if (StringUtils.hasText(username) && StringUtils.hasText(token) && (userInfo = stringRedisTemplate.opsForHash().get("short-link:login:" + username, token)) != null) {
                     JSONObject userInfoJsonObject = JSON.parseObject(userInfo.toString());
+                    //添加用户信息到请求头来增强请求
+                    // exchange.getRequest()表示获取请求对象，使用 mutate() 方法创建一个新的 ServerHttpRequest.Builder
                     ServerHttpRequest.Builder builder = exchange.getRequest().mutate().headers(httpHeaders -> {
                         httpHeaders.set("userId", userInfoJsonObject.getString("id"));
                         httpHeaders.set("realName", URLEncoder.encode(userInfoJsonObject.getString("realName"), StandardCharsets.UTF_8));
                     });
                     return chain.filter(exchange.mutate().request(builder.build()).build());
                 }
+                //如果验证令牌失败则返回未授权状态
                 ServerHttpResponse response = exchange.getResponse();
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
                 return response.writeWith(Mono.fromSupplier(() -> {

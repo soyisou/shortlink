@@ -2,10 +2,10 @@ spring:
   cloud:
     gateway:
       routes:
-        - id: short-link-admin
-          uri: lb://short-link-admin/api/short-link/admin/**
-          predicates:
-            - Path=/api/short-link/admin/**
+        - id: short-link-admin # 路由规则，自定义，唯一
+          uri: lb://short-link-admin/api/short-link/admin/** # 路由目标微服务，lb代表负载均衡
+          predicates: # 路由断言，判断请求是否符合规则，符合则路由到目标
+            - Path=/api/short-link/admin/** # 以请求路径做判断，以/api/short-link/admin开头则符合
           filters:
             - name: TokenValidate
               args:

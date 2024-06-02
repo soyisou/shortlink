@@ -29,7 +29,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
  */
 @SpringBootApplication
 @EnableDiscoveryClient
-@EnableFeignClients("com.nageoffer.shortlink.admin.remote")
+@EnableFeignClients(value = "com.nageoffer.shortlink.admin.remote")
 @MapperScan("com.nageoffer.shortlink.admin.dao.mapper")
 public class ShortLinkAdminApplication {
 
