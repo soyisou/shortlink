@@ -81,11 +81,13 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
             ServerHttpRequest request = exchange.getRequest();
             String requestPath = request.getPath().toString();
             String requestMethod = request.getMethod().name();
+            //判断请求路径和请求方法是否在白名单
+            //1. 不在白名单
             if (!isPathInWhiteList(requestPath, requestMethod, config.getWhitePathList())) {
                 String username = request.getHeaders().getFirst("username");
                 String token = request.getHeaders().getFirst("token");
                 Object userInfo;
-                //验证令牌
+                //验证令牌, 并且token未过期
                 if (StringUtils.hasText(username) && StringUtils.hasText(token) && (userInfo = stringRedisTemplate.opsForHash().get("short-link:login:" + username, token)) != null) {
                     JSONObject userInfoJsonObject = JSON.parseObject(userInfo.toString());
                     //添加用户信息到请求头来增强请求
@@ -99,6 +101,7 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
                 //如果验证令牌失败则返回未授权状态
                 ServerHttpResponse response = exchange.getResponse();
                 response.setStatusCode(HttpStatus.UNAUTHORIZED);
+
                 return response.writeWith(Mono.fromSupplier(() -> {
                     DataBufferFactory bufferFactory = response.bufferFactory();
                     GatewayErrorResult resultMessage = GatewayErrorResult.builder()
@@ -108,11 +111,22 @@ public class TokenValidateGatewayFilterFactory extends AbstractGatewayFilterFact
                     return bufferFactory.wrap(JSON.toJSONString(resultMessage).getBytes());
                 }));
             }
+            //2. 在白名单
             return chain.filter(exchange);
         };
     }
 
+    /**
+     * 根据请求路径和请求方法判断是否在白名单
+     * @param requestPath 请求路径
+     * @param requestMethod 请求方法
+     * @param whitePathList 白名单列表
+     * @return
+     *  true: 在白名单
+     *  false：不在白名单
+     */
     private boolean isPathInWhiteList(String requestPath, String requestMethod, List<String> whitePathList) {
-        return (!CollectionUtils.isEmpty(whitePathList) && whitePathList.stream().anyMatch(requestPath::startsWith)) || (Objects.equals(requestPath, "/api/short-link/admin/v1/user") && Objects.equals(requestMethod, "POST"));
+        return (!CollectionUtils.isEmpty(whitePathList) && whitePathList.stream().anyMatch(requestPath::startsWith))
+                || (Objects.equals(requestPath, "/api/short-link/admin/v1/user") && Objects.equals(requestMethod, "POST"));
     }
 }

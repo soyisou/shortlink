@@ -33,18 +33,18 @@ import com.nageoffer.shortlink.admin.toolkit.EasyExcelWebUtil;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
 import lombok.SneakyThrows;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestBody;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
 /**
  * 短链接后管控制层
  * 公众号：马丁玩编程，回复：加群，添加马哥微信（备注：link）获取项目资料
+ * @author 87866
  */
 @RestController(value = "shortLinkControllerByAdmin")
+//或者直接使用@RequestMapping，而不是在所有方法头上增加
+//@RequestMapping("/api/short-link/admin/")
 @RequiredArgsConstructor
 public class ShortLinkController {
 
